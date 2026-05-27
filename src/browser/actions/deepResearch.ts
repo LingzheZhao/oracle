@@ -176,6 +176,7 @@ export async function waitForDeepResearchCompletion(
     typeof minTurnIndex === "number" && Number.isFinite(minTurnIndex) && minTurnIndex >= 0
       ? Math.floor(minTurnIndex)
       : -1;
+  let allowFinalUnscopedRecovery = minTurnLiteral < 0;
 
   logger(`Monitoring Deep Research (timeout: ${Math.round(timeoutMs / 60_000)}min)...`);
 
@@ -203,12 +204,11 @@ export async function waitForDeepResearchCompletion(
       );
     }
 
-    const frameResult = Page
-      ? await readDeepResearchFrameResult(Runtime, Page).catch(() => null)
-      : client
-        ? await readDeepResearchTargetResult(client).catch(() => null)
-        : null;
+    const frameResult = await readDeepResearchFrameOrTargetResult(Runtime, Page, client);
     const scopedToNewTurns = minTurnLiteral >= 0;
+    if (val?.hasActiveScopedResearch) {
+      allowFinalUnscopedRecovery = true;
+    }
     if (
       frameResult?.completed &&
       frameResult.text &&
@@ -247,6 +247,25 @@ export async function waitForDeepResearchCompletion(
     await delay(DEEP_RESEARCH_POLL_INTERVAL_MS);
   }
 
+  // Timeout — Deep Research may have completed inside the sandbox iframe even when
+  // the parent ChatGPT DOM never exposed a normal assistant turn. Do one final
+  // unscoped iframe/target recovery before reporting timeout.
+  const finalFrameResult = allowFinalUnscopedRecovery
+    ? await readDeepResearchFrameOrTargetResult(Runtime, Page, client)
+    : null;
+  if (finalFrameResult?.completed && finalFrameResult.text) {
+    logger(
+      `Deep Research completed via final iframe recovery (${Math.round(
+        (Date.now() - start) / 1000,
+      )}s elapsed)`,
+    );
+    return {
+      text: finalFrameResult.text,
+      html: finalFrameResult.html,
+      meta: { turnId: null, messageId: null },
+    };
+  }
+
   // Timeout — throw with metadata for potential reattach
   const elapsed = Math.round((Date.now() - start) / 1000);
   throw new BrowserAutomationError(
@@ -257,6 +276,8 @@ export async function waitForDeepResearchCompletion(
       code: "deep-research-timeout",
       elapsedMs: Date.now() - start,
       lastTextLength,
+      recoveryAttempted: true,
+      recoveryFoundArtifact: false,
     },
   );
 }
@@ -322,6 +343,27 @@ interface DeepResearchFrameStatus {
   textLength: number;
   text?: string;
   html?: string;
+}
+
+async function readDeepResearchFrameOrTargetResult(
+  Runtime: ChromeClient["Runtime"],
+  Page?: ChromeClient["Page"],
+  client?: ChromeClient,
+): Promise<DeepResearchFrameStatus | null> {
+  const frameResult = Page
+    ? await readDeepResearchFrameResult(Runtime, Page).catch(() => null)
+    : null;
+  if (frameResult?.completed) {
+    return frameResult;
+  }
+  const targetResult = client ? await readDeepResearchTargetResult(client).catch(() => null) : null;
+  if (targetResult?.completed) {
+    return targetResult;
+  }
+  if ((targetResult?.textLength ?? 0) > (frameResult?.textLength ?? 0)) {
+    return targetResult;
+  }
+  return frameResult ?? targetResult;
 }
 
 async function readDeepResearchFrameResult(
