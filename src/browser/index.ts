@@ -77,6 +77,7 @@ import {
 import {
   appendArtifacts,
   saveBrowserTranscriptArtifact,
+  saveDeepResearchMetadataArtifact,
   saveDeepResearchReportArtifact,
 } from "./artifacts.js";
 import { collectGeneratedImageArtifacts } from "./chatgptImages.js";
@@ -1226,6 +1227,16 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
           }),
         logger,
       );
+      const metadataArtifact = await saveOptionalArtifact(
+        () =>
+          saveDeepResearchMetadataArtifact({
+            sessionId: options.sessionId,
+            reportMarkdown: researchResult.text,
+            conversationUrl: lastUrl,
+            logger,
+          }),
+        logger,
+      );
       const transcriptArtifact = await saveOptionalArtifact(
         () =>
           saveBrowserTranscriptArtifact({
@@ -1233,12 +1244,16 @@ export async function runBrowserMode(options: BrowserRunOptions): Promise<Browse
             prompt: promptText,
             answerMarkdown: researchResult.text,
             conversationUrl: lastUrl,
-            artifacts: appendArtifacts(undefined, [reportArtifact]),
+            artifacts: appendArtifacts(undefined, [reportArtifact, metadataArtifact]),
             logger,
           }),
         logger,
       );
-      const savedArtifacts = appendArtifacts(undefined, [reportArtifact, transcriptArtifact]);
+      const savedArtifacts = appendArtifacts(undefined, [
+        reportArtifact,
+        metadataArtifact,
+        transcriptArtifact,
+      ]);
       const archive = await maybeArchiveCompletedConversation({
         Runtime,
         logger,
@@ -2555,6 +2570,16 @@ async function runRemoteBrowserMode(
           }),
         logger,
       );
+      const metadataArtifact = await saveOptionalArtifact(
+        () =>
+          saveDeepResearchMetadataArtifact({
+            sessionId: options.sessionId,
+            reportMarkdown: researchResult.text,
+            conversationUrl: lastUrl,
+            logger,
+          }),
+        logger,
+      );
       const transcriptArtifact = await saveOptionalArtifact(
         () =>
           saveBrowserTranscriptArtifact({
@@ -2562,12 +2587,16 @@ async function runRemoteBrowserMode(
             prompt: promptText,
             answerMarkdown: researchResult.text,
             conversationUrl: lastUrl,
-            artifacts: appendArtifacts(undefined, [reportArtifact]),
+            artifacts: appendArtifacts(undefined, [reportArtifact, metadataArtifact]),
             logger,
           }),
         logger,
       );
-      const savedArtifacts = appendArtifacts(undefined, [reportArtifact, transcriptArtifact]);
+      const savedArtifacts = appendArtifacts(undefined, [
+        reportArtifact,
+        metadataArtifact,
+        transcriptArtifact,
+      ]);
       const archive = await maybeArchiveCompletedConversation({
         Runtime,
         logger,

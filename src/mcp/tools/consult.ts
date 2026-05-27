@@ -159,6 +159,15 @@ const consultModelSummaryShape = z.object({
   logPath: z.string().optional(),
 });
 
+const consultArtifactShape = z.object({
+  kind: z.string(),
+  path: z.string(),
+  label: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().optional(),
+  sourceUrl: z.string().optional(),
+});
+
 const consultDryRunResolvedShape = z.object({
   resolvedEngine: z.enum(["api", "browser"]),
   model: z.string(),
@@ -190,6 +199,7 @@ const consultOutputShape = {
   dryRun: z.boolean().optional(),
   resolved: consultDryRunResolvedShape.optional(),
   models: z.array(consultModelSummaryShape).optional(),
+  artifacts: z.array(consultArtifactShape).optional(),
 } satisfies z.ZodRawShape;
 
 export type ConsultModelSummary = z.infer<typeof consultModelSummaryShape>;
@@ -614,6 +624,7 @@ export function registerConsultTool(server: McpServer): void {
             status: finalMeta.status,
             output: logTail ?? "",
             models: modelsSummary,
+            artifacts: finalMeta.artifacts ?? [],
           },
         };
       } catch (error) {

@@ -17,6 +17,7 @@ import type { BrowserArchiveResult, BrowserLogger } from "./types.js";
 import {
   appendArtifacts,
   saveBrowserTranscriptArtifact,
+  saveDeepResearchMetadataArtifact,
   saveDeepResearchReportArtifact,
 } from "./artifacts.js";
 
@@ -333,7 +334,13 @@ export async function ensureSessionArtifacts(params: {
       conversationUrl: params.conversationUrl,
       logger: params.logger,
     }).catch(() => null);
-    artifacts = appendArtifacts(artifacts, [report]);
+    const metadata = await saveDeepResearchMetadataArtifact({
+      sessionId: params.sessionId,
+      reportMarkdown: params.answerMarkdown,
+      conversationUrl: params.conversationUrl,
+      logger: params.logger,
+    }).catch(() => null);
+    artifacts = appendArtifacts(artifacts, [report, metadata]);
   }
   const hasTranscript = artifacts?.some((artifact) => artifact.kind === "transcript");
   if (!hasTranscript) {

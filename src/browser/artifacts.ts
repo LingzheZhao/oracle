@@ -121,6 +121,84 @@ export async function saveDeepResearchReportArtifact(params: {
   });
 }
 
+export interface DeepResearchMetadata {
+  title: string | null;
+  completedIn: string | null;
+  citationsCount: number | null;
+  searchesCount: number | null;
+  referencesText: string | null;
+}
+
+function parseDeepResearchCount(rawText: string, label: "citations" | "searches"): number | null {
+  for (const line of rawText.split(/\n+/)) {
+    const direct = line.trim().match(new RegExp(`^(\\d+)\\s+${label}\\b`, "i"));
+    if (direct?.[1]) {
+      return Number.parseInt(direct[1], 10);
+    }
+  }
+  return null;
+}
+
+function extractDeepResearchTitle(lines: string[]): string | null {
+  const ignored =
+    /^(research completed|copy contents|export to markdown|export to word|export to pdf)/i;
+  for (const line of lines) {
+    if (/^\d+$/.test(line) || ignored.test(line)) {
+      continue;
+    }
+    if (/citations?|searches?/i.test(line)) {
+      continue;
+    }
+    return line;
+  }
+  return null;
+}
+
+export function extractDeepResearchMetadata(reportMarkdown: string): DeepResearchMetadata {
+  const text = reportMarkdown.trim();
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const completedIn =
+    text.match(/Research completed in\s+([^·\n]+)/i)?.[1]?.trim() ??
+    text.match(/Research completed in\s+(.+?)\s+citations/i)?.[1]?.trim() ??
+    null;
+  const referencesIndex = lines.findIndex((line) => /^references$/i.test(line));
+  const referencesText =
+    referencesIndex >= 0 ? lines.slice(referencesIndex).join("\n").trim() || null : null;
+  return {
+    title: extractDeepResearchTitle(lines),
+    completedIn,
+    citationsCount: parseDeepResearchCount(text, "citations"),
+    searchesCount: parseDeepResearchCount(text, "searches"),
+    referencesText,
+  };
+}
+
+export async function saveDeepResearchMetadataArtifact(params: {
+  sessionId?: string;
+  reportMarkdown: string;
+  conversationUrl?: string;
+  logger?: BrowserLogger;
+}): Promise<SessionArtifact | null> {
+  const report = params.reportMarkdown.trim();
+  if (report.length < 40 || isToolOnlyPlaceholder(report)) {
+    return null;
+  }
+  const metadata = extractDeepResearchMetadata(report);
+  return writeTextBrowserArtifact({
+    sessionId: params.sessionId,
+    kind: "deep-research-metadata",
+    filename: "deep-research-metadata.json",
+    contents: JSON.stringify(metadata, null, 2),
+    label: "Deep Research metadata",
+    mimeType: "application/json",
+    sourceUrl: params.conversationUrl,
+    logger: params.logger,
+  });
+}
+
 export async function saveBrowserTranscriptArtifact(params: {
   sessionId?: string;
   prompt: string;

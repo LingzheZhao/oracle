@@ -4,8 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   appendArtifacts,
+  extractDeepResearchMetadata,
   resolveSessionArtifactsDir,
   saveBrowserTranscriptArtifact,
+  saveDeepResearchMetadataArtifact,
   saveDeepResearchReportArtifact,
   __test__,
 } from "../../src/browser/artifacts.js";
@@ -49,6 +51,53 @@ describe("browser session artifacts", () => {
         reportMarkdown: "Called tool",
       }),
     ).resolves.toBeNull();
+  });
+
+  test("writes Deep Research metadata without guessing animated citation counters", async () => {
+    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "oracle-research-metadata-"));
+    setOracleHomeDirOverrideForTest(tmpHome);
+    const report = [
+      "Research completed in 15m ·",
+      "0",
+      "1",
+      "citations ·",
+      "0",
+      "1",
+      "searches",
+      "Scientific decision review for GitHub issue 145",
+      "Executive assessment",
+      "The supplied evidence supports a clear decision.",
+      "References",
+      "1. Example reference. https://example.com",
+    ].join("\n");
+
+    const metadata = extractDeepResearchMetadata(report);
+    expect(metadata).toMatchObject({
+      title: "Scientific decision review for GitHub issue 145",
+      completedIn: "15m",
+      citationsCount: null,
+      searchesCount: null,
+    });
+    expect(metadata.referencesText).toContain("Example reference");
+
+    const artifact = await saveDeepResearchMetadataArtifact({
+      sessionId: "issue-145",
+      reportMarkdown: report,
+      conversationUrl: "https://chatgpt.com/c/abc",
+    });
+
+    expect(artifact).toMatchObject({
+      kind: "deep-research-metadata",
+      label: "Deep Research metadata",
+      mimeType: "application/json",
+      sourceUrl: "https://chatgpt.com/c/abc",
+    });
+    const saved = JSON.parse(await fs.readFile(artifact!.path, "utf8")) as {
+      title?: string;
+      referencesText?: string;
+    };
+    expect(saved.title).toBe("Scientific decision review for GitHub issue 145");
+    expect(saved.referencesText).toContain("https://example.com");
   });
 
   test("writes a transcript with prompt, answer, conversation URL, and artifact references", async () => {
